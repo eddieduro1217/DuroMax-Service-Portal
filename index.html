@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DuroMax / DuroStar — Service Center Portal</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --border:#2a313c; --text:#e6edf3; --muted:#8b98a5;
+    --accent:#e0392b; --accent2:#1f6feb; --ok:#2ea043; --warn:#d29922;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);}
+  header{background:var(--panel);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;justify-content:space-between;align-items:center;}
+  header h1{font-size:18px;margin:0;}
+  header .sub{color:var(--muted);font-size:12px;}
+  main{max-width:960px;margin:0 auto;padding:24px;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px;}
+  input,select,textarea,button{font-family:inherit;font-size:14px;}
+  input,select,textarea{width:100%;padding:9px 10px;background:#0d1117;border:1px solid var(--border);border-radius:6px;color:var(--text);margin-top:4px;}
+  label{font-size:12px;color:var(--muted);display:block;margin-top:12px;}
+  button{cursor:pointer;border:none;border-radius:6px;padding:9px 16px;font-weight:600;}
+  .btn-primary{background:var(--accent2);color:#fff;}
+  .btn-primary:hover{opacity:.9;}
+  .btn-secondary{background:transparent;border:1px solid var(--border);color:var(--text);}
+  .btn-danger{background:var(--accent);color:#fff;}
+  .row{display:flex;gap:10px;align-items:end;}
+  .row>div{flex:1;}
+  .error{color:#f85149;font-size:13px;margin-top:8px;}
+  .msg-ok{color:var(--ok);font-size:13px;margin-top:8px;}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{text-align:left;padding:8px;border-bottom:1px solid var(--border);}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;}
+  tr:hover{background:#1c2229;cursor:pointer;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;text-transform:capitalize;}
+  .badge.submitted{background:#3d3320;color:var(--warn);}
+  .badge.in_review{background:#1c2c47;color:#58a6ff;}
+  .badge.ordered{background:#1c2c47;color:#58a6ff;}
+  .badge.fulfilled{background:#1a3625;color:var(--ok);}
+  .badge.cancelled{background:#3d1f1f;color:#f85149;}
+  .tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);}
+  .tab{padding:10px 16px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;}
+  .tab.active{color:var(--text);border-bottom-color:var(--accent2);}
+  .item-row{display:flex;gap:8px;align-items:end;margin-bottom:8px;}
+  .item-row>div{flex:1;}
+  .item-row .qty{flex:0 0 70px;}
+  .item-row .remove{flex:0 0 auto;}
+  .msg-thread{max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:12px;margin-bottom:10px;background:#0d1117;}
+  .msg-bubble{margin-bottom:12px;}
+  .msg-bubble .meta{font-size:11px;color:var(--muted);margin-bottom:2px;}
+  .msg-bubble .body{background:#1c2229;padding:8px 12px;border-radius:6px;display:inline-block;max-width:80%;}
+  .msg-bubble.mine .body{background:#1f3a5f;}
+  .back-link{color:var(--muted);cursor:pointer;font-size:13px;margin-bottom:12px;display:inline-block;}
+  .hidden{display:none;}
+  .center-box{max-width:400px;margin:80px auto;}
+  .muted{color:var(--muted);}
+  select[multiple]{height:auto;}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>DuroMax / DuroStar Service Portal</h1>
+    <div class="sub">Authorized service center access</div>
+  </div>
+  <div id="headerRight"></div>
+</header>
+
+<main id="app"></main>
+
+<script>
+// ============ CONFIG ============
+const SUPABASE_URL = 'https://sulbljseripsdsejuugo.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_gzlOLBLfbKjBN7e_SknUqQ_B8ZiNwRs';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const SERIES = {"HX Series":["XP4850HX","XP5500HX","XP10000HX","XP12000HX","XP13000HX","XP13750HX","XP15000HX","XP15500HX","XP17500HX"],"HXT Series":["XP13000HXT","XP13750HXT","XP15000HXT","XP17500HXT"],"HX+ / HXT+":["XP15000HX+","XP15000HXT+"],"iH Series":["XP2300iH","XP7000iH","XP9000iH","XP9500iH","XP11000iH","XP16000iH","XP28000iH"],"iHT Series":["XP7000iHT","XP9500iHT","XP11000iHT","XP16000iHT","XP28000iHT"],"EH Series":["XP13000EH"],"MX Series":["DS13000MX"],"MXT Series":["DS13000MXT"]};
+
+let currentUser = null;
+let currentProfile = null; // service_centers row
+let currentOrders = [];
+let currentOrderDetail = null; // {order, items, messages}
+let allServiceCenters = []; // admin only
+let allOrders = []; // admin only
+
+const app = document.getElementById('app');
+const headerRight = document.getElementById('headerRight');
+
+// ============ AUTH ============
+async function init(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if (session){
+    currentUser = session.user;
+    await loadProfile();
+  } else {
+    renderLogin();
+  }
+  sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT'){
+      currentUser = null; currentProfile = null;
+      renderLogin();
+    }
+  });
+}
+
+async function loadProfile(){
+  const { data, error } = await sb.from('service_centers').select('*').eq('id', currentUser.id).maybeSingle();
+  if (error){ renderError('Could not load your account: ' + error.message); return; }
+  if (!data){
+    renderPending();
+    return;
+  }
+  currentProfile = data;
+  renderHeader();
+  if (currentProfile.is_admin) {
+    await renderAdminDashboard();
+  } else {
+    await renderDashboard();
+  }
+}
+
+function renderHeader(){
+  headerRight.innerHTML = `
+    <span class="muted" style="margin-right:14px;font-size:13px;">${escapeHtml(currentProfile.company_name)}${currentProfile.is_admin ? ' (admin)' : ''}</span>
+    <button class="btn-secondary" onclick="signOut()">Sign out</button>
+  `;
+}
+
+async function signOut(){
+  await sb.auth.signOut();
+}
+
+function renderLogin(){
+  headerRight.innerHTML = '';
+  app.innerHTML = `
+    <div class="center-box">
+      <div class="card">
+        <h2 style="margin-top:0;">Service Center Sign In</h2>
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="you@servicecenter.com">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="••••••••">
+        <div id="loginError" class="error"></div>
+        <button class="btn-primary" style="margin-top:16px;width:100%;" onclick="doLogin()">Sign In</button>
+        <div style="text-align:center;margin-top:14px;">
+          <a href="#" class="muted" style="font-size:13px;" onclick="doForgotPassword();return false;">Forgot password?</a>
+        </div>
+        <p class="muted" style="font-size:12px;margin-top:20px;">
+          Access is by invitation only. If you're an authorized service center without login credentials, contact
+          <a href="mailto:orderparts@duromaxpower.com" style="color:var(--accent2);">orderparts@duromaxpower.com</a>.
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+async function doLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  if (!email || !password){ errEl.textContent = 'Enter your email and password.'; return; }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error){ errEl.textContent = error.message; return; }
+  currentUser = data.user;
+  await loadProfile();
+}
+
+async function doForgotPassword(){
+  const email = prompt('Enter your account email to receive a password reset link:');
+  if (!email) return;
+  const { error } = await sb.auth.resetPasswordForEmail(email);
+  if (error){ alert('Error: ' + error.message); }
+  else { alert('If that email is registered, a reset link has been sent.'); }
+}
+
+function renderPending(){
+  renderHeader2();
+  app.innerHTML = `
+    <div class="center-box">
+      <div class="card">
+        <h2 style="margin-top:0;">Account Not Yet Set Up</h2>
+        <p class="muted">Your login works, but your service center profile hasn't been created yet. Please contact
+        <a href="mailto:orderparts@duromaxpower.com" style="color:var(--accent2);">orderparts@duromaxpower.com</a> to finish setup.</p>
+        <button class="btn-secondary" onclick="signOut()">Sign out</button>
+      </div>
+    </div>
+  `;
+}
+function renderHeader2(){
+  headerRight.innerHTML = `<button class="btn-secondary" onclick="signOut()">Sign out</button>`;
+}
+
+function renderError(msg){
+  app.innerHTML = `<div class="card error">${escapeHtml(msg)}</div>`;
+}
+
+// ============ SERVICE CENTER DASHBOARD ============
+async function renderDashboard(activeTab='orders'){
+  const { data: orders, error } = await sb.from('orders').select('*').order('created_at', {ascending:false});
+  if (error){ renderError('Could not load orders: ' + error.message); return; }
+  currentOrders = orders || [];
+
+  app.innerHTML = `
+    <div class="tabs">
+      <div class="tab ${activeTab==='orders'?'active':''}" onclick="renderDashboard('orders')">My Orders</div>
+      <div class="tab ${activeTab==='new'?'active':''}" onclick="renderDashboard('new')">New Order Request</div>
+    </div>
+    <div id="tabContent"></div>
+  `;
+  const content = document.getElementById('tabContent');
+
+  if (activeTab === 'new'){
+    content.innerHTML = renderNewOrderForm();
+    addNewOrderRow();
+  } else {
+    if (currentOrders.length === 0){
+      content.innerHTML = `<div class="card muted">No orders yet. Use "New Order Request" to submit one.</div>`;
+    } else {
+      content.innerHTML = `
+        <div class="card">
+          <table>
+            <thead><tr><th>Order Ref</th><th>Date</th><th>Status</th><th>Note</th></tr></thead>
+            <tbody>
+              ${currentOrders.map(o => `
+                <tr onclick="openOrder('${o.id}')">
+                  <td>${escapeHtml(o.order_ref)}</td>
+                  <td>${new Date(o.created_at).toLocaleDateString()}</td>
+                  <td><span class="badge ${o.status}">${o.status.replace('_',' ')}</span></td>
+                  <td class="muted">${escapeHtml(o.note || '')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+  }
+}
+
+function renderNewOrderForm(){
+  const modelOptions = Object.entries(SERIES).map(([series, models]) =>
+    `<optgroup label="${escapeHtml(series)}">${models.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</optgroup>`
+  ).join('');
+  return `
+    <div class="card">
+      <h3 style="margin-top:0;">New Order Request</h3>
+      <div id="orderItemsList"></div>
+      <button class="btn-secondary" onclick="addNewOrderRow()" type="button">+ Add another part</button>
+      <label>Note (optional)</label>
+      <textarea id="orderNote" rows="3" placeholder="Any additional details for this order..."></textarea>
+      <div id="orderFormError" class="error"></div>
+      <div id="orderFormOk" class="msg-ok"></div>
+      <button class="btn-primary" style="margin-top:16px;" onclick="submitOrder()">Submit Order Request</button>
+    </div>
+    <template id="modelOptionsTemplate">${modelOptions}</template>
+  `;
+}
+
+let orderRowCount = 0;
+function addNewOrderRow(){
+  orderRowCount++;
+  const id = 'row_' + orderRowCount;
+  const list = document.getElementById('orderItemsList');
+  const modelOptions = document.getElementById('modelOptionsTemplate')?.innerHTML || '';
+  const div = document.createElement('div');
+  div.className = 'item-row';
+  div.id = id;
+  div.innerHTML = `
+    <div>
+      <label>Model</label>
+      <select class="f-model">${modelOptions}</select>
+    </div>
+    <div>
+      <label>Part # / Description</label>
+      <input class="f-desc" placeholder="e.g. Part #12345 - Air Filter">
+    </div>
+    <div class="qty">
+      <label>Qty</label>
+      <input class="f-qty" type="number" min="1" value="1">
+    </div>
+    <div class="remove">
+      <label>&nbsp;</label>
+      <button class="btn-secondary" type="button" onclick="document.getElementById('${id}').remove()">✕</button>
+    </div>
+  `;
+  list.appendChild(div);
+}
+
+function genOrderRef(){
+  const d = new Date();
+  const ymd = d.getFullYear().toString() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+  const rand = Math.floor(1000 + Math.random()*9000);
+  return `PR-${ymd}-${rand}`;
+}
+
+async function submitOrder(){
+  const rows = document.querySelectorAll('#orderItemsList .item-row');
+  const errEl = document.getElementById('orderFormError');
+  const okEl = document.getElementById('orderFormOk');
+  errEl.textContent = ''; okEl.textContent = '';
+
+  const items = [];
+  for (const row of rows){
+    const model = row.querySelector('.f-model').value;
+    const desc = row.querySelector('.f-desc').value.trim();
+    const qty = parseInt(row.querySelector('.f-qty').value, 10) || 1;
+    if (!desc){ continue; }
+    items.push({ model, description: desc, qty });
+  }
+  if (items.length === 0){ errEl.textContent = 'Add at least one part before submitting.'; return; }
+
+  const note = document.getElementById('orderNote').value.trim();
+  const order_ref = genOrderRef();
+
+  const { data: order, error: orderErr } = await sb.from('orders').insert({
+    service_center_id: currentUser.id, order_ref, note: note || null
+  }).select().single();
+  if (orderErr){ errEl.textContent = 'Error creating order: ' + orderErr.message; return; }
+
+  const itemRows = items.map(it => ({ order_id: order.id, model: it.model, description: it.description, qty: it.qty }));
+  const { error: itemsErr } = await sb.from('order_items').insert(itemRows);
+  if (itemsErr){ errEl.textContent = 'Order created but items failed: ' + itemsErr.message; return; }
+
+  okEl.textContent = `Order ${order_ref} submitted successfully.`;
+  setTimeout(()=>renderDashboard('orders'), 1200);
+}
+
+async function openOrder(orderId){
+  const order = currentOrders.find(o => o.id === orderId) || allOrders.find(o => o.id === orderId);
+  const { data: items } = await sb.from('order_items').select('*').eq('order_id', orderId);
+  const { data: messages } = await sb.from('messages').select('*').eq('order_id', orderId).order('created_at', {ascending:true});
+  currentOrderDetail = { order, items: items||[], messages: messages||[] };
+  renderOrderDetail();
+}
+
+function renderOrderDetail(){
+  const { order, items, messages } = currentOrderDetail;
+  const isAdmin = currentProfile.is_admin;
+  app.innerHTML = `
+    <a class="back-link" onclick="${isAdmin ? 'renderAdminDashboard()' : 'renderDashboard(\'orders\')'}">&larr; Back</a>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h3 style="margin:0;">${escapeHtml(order.order_ref)}</h3>
+        <span class="badge ${order.status}">${order.status.replace('_',' ')}</span>
+      </div>
+      <p class="muted" style="font-size:13px;">Submitted ${new Date(order.created_at).toLocaleString()}</p>
+      ${order.note ? `<p><strong>Note:</strong> ${escapeHtml(order.note)}</p>` : ''}
+      ${isAdmin ? `
+        <label>Update Status</label>
+        <select id="statusSelect" onchange="updateOrderStatus('${order.id}', this.value)">
+          ${['submitted','in_review','ordered','fulfilled','cancelled'].map(s=>`<option value="${s}" ${s===order.status?'selected':''}>${s.replace('_',' ')}</option>`).join('')}
+        </select>
+      ` : ''}
+      <table style="margin-top:16px;">
+        <thead><tr><th>Model</th><th>Part / Description</th><th>Qty</th></tr></thead>
+        <tbody>
+          ${items.map(it => `<tr><td>${escapeHtml(it.model)}</td><td>${escapeHtml(it.description||'')}</td><td>${it.qty}</td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0;">Messages</h3>
+      <div class="msg-thread" id="msgThread">
+        ${messages.length===0 ? '<p class="muted">No messages yet.</p>' : messages.map(m => `
+          <div class="msg-bubble ${m.sender_id===currentUser.id?'mine':''}">
+            <div class="meta">${m.sender_id===currentUser.id?'You':(isAdmin?'Service Center':'DuroMax Team')} · ${new Date(m.created_at).toLocaleString()}</div>
+            <div class="body">${escapeHtml(m.body)}</div>
+          </div>
+        `).join('')}
+      </div>
+      <textarea id="newMsgBody" rows="2" placeholder="Type a message..."></textarea>
+      <div id="msgError" class="error"></div>
+      <button class="btn-primary" style="margin-top:10px;" onclick="sendMessage('${order.id}', '${order.service_center_id}')">Send</button>
+    </div>
+  `;
+}
+
+async function sendMessage(orderId, serviceCenterId){
+  const body = document.getElementById('newMsgBody').value.trim();
+  const errEl = document.getElementById('msgError');
+  if (!body){ errEl.textContent = 'Message cannot be empty.'; return; }
+  const { error } = await sb.from('messages').insert({
+    order_id: orderId, service_center_id: serviceCenterId, sender_id: currentUser.id, body
+  });
+  if (error){ errEl.textContent = error.message; return; }
+  await openOrder(orderId);
+}
+
+async function updateOrderStatus(orderId, status){
+  const { error } = await sb.from('orders').update({ status }).eq('id', orderId);
+  if (error){ alert('Error updating status: ' + error.message); return; }
+  const order = allOrders.find(o=>o.id===orderId);
+  if (order) order.status = status;
+}
+
+// ============ ADMIN DASHBOARD ============
+async function renderAdminDashboard(activeTab='orders'){
+  const { data: orders, error: oErr } = await sb.from('orders').select('*, service_centers(company_name)').order('created_at', {ascending:false});
+  const { data: centers, error: cErr } = await sb.from('service_centers').select('*').order('company_name');
+  if (oErr || cErr){ renderError('Could not load admin data: ' + (oErr?.message||cErr?.message)); return; }
+  allOrders = orders || [];
+  allServiceCenters = centers || [];
+
+  app.innerHTML = `
+    <div class="tabs">
+      <div class="tab ${activeTab==='orders'?'active':''}" onclick="renderAdminDashboard('orders')">All Orders</div>
+      <div class="tab ${activeTab==='centers'?'active':''}" onclick="renderAdminDashboard('centers')">Service Centers</div>
+    </div>
+    <div id="tabContent"></div>
+  `;
+  const content = document.getElementById('tabContent');
+
+  if (activeTab === 'centers'){
+    content.innerHTML = `
+      <div class="card">
+        <table>
+          <thead><tr><th>Company</th><th>Contact</th><th>Email</th><th>Active</th></tr></thead>
+          <tbody>
+            ${allServiceCenters.map(c => `
+              <tr>
+                <td>${escapeHtml(c.company_name)}</td>
+                <td>${escapeHtml(c.contact_name||'')}</td>
+                <td>${escapeHtml(c.contact_email)}</td>
+                <td>${c.is_active ? '✅' : '❌'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <p class="muted" style="font-size:12px;margin-top:14px;">To add a new service center: create their login under Supabase → Authentication → Users, then insert a matching row in the <code>service_centers</code> table with that user's ID.</p>
+      </div>
+    `;
+  } else {
+    content.innerHTML = `
+      <div class="card">
+        <table>
+          <thead><tr><th>Order Ref</th><th>Service Center</th><th>Date</th><th>Status</th></tr></thead>
+          <tbody>
+            ${allOrders.map(o => `
+              <tr onclick="openOrder('${o.id}')">
+                <td>${escapeHtml(o.order_ref)}</td>
+                <td>${escapeHtml(o.service_centers?.company_name || '—')}</td>
+                <td>${new Date(o.created_at).toLocaleDateString()}</td>
+                <td><span class="badge ${o.status}">${o.status.replace('_',' ')}</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+}
+
+// ============ UTIL ============
+function escapeHtml(str){
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+init();
+</script>
+</body>
+</html>
