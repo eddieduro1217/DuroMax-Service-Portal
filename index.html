@@ -84,8 +84,15 @@
   .fig-meta{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:auto;padding-top:8px;border-top:1px solid var(--line-soft);}
   .detail-layout{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;align-items:start;}
   @media (max-width:980px){ .detail-layout{grid-template-columns:1fr;} }
-  .diagram-wrap{background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;text-align:center;min-height:600px;display:flex;align-items:center;justify-content:center;}
-  .diagram-wrap img{max-width:100%;max-height:78vh;display:block;margin:0 auto;object-fit:contain;}
+  .diagram-wrap{background:#fff;border:1px solid var(--border);border-radius:10px;overflow:hidden;text-align:center;min-height:600px;display:flex;flex-direction:column;}
+  .diagram-head{padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);background:var(--panel-2);display:flex;justify-content:space-between;}
+  .img-zoom-wrap{position:relative;flex:1;display:flex;min-height:0;overflow:hidden;align-items:center;justify-content:center;}
+  .img-zoom-wrap img{cursor:zoom-in;user-select:none;-webkit-user-drag:none;touch-action:none;max-width:100%;max-height:78vh;object-fit:contain;display:block;}
+  .img-zoom-wrap.zoom-active img{cursor:crosshair;}
+  .mag-lens{position:absolute;top:0;left:0;width:300px;height:300px;border-radius:50%;border:3px solid var(--ok);box-shadow:0 6px 20px rgba(0,0,0,.35),inset 0 0 0 2px rgba(255,255,255,.55);background-color:#fff;background-repeat:no-repeat;pointer-events:none;display:none;z-index:5;}
+  .mag-lens.show{display:block;}
+  .zoom-hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(28,29,29,.82);color:#fff;font-size:11px;font-weight:600;padding:6px 13px;border-radius:20px;pointer-events:none;z-index:6;white-space:nowrap;}
+  @media (max-width:640px){ .mag-lens{width:200px;height:200px;} }
   .parts-table-scroll{max-height:78vh;overflow-y:auto;}
   .qty-stepper{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:6px;overflow:hidden;}
   .qty-stepper button{background:var(--panel-2);color:var(--text);width:24px;height:26px;padding:0;font-weight:700;}
@@ -394,9 +401,21 @@ function renderFigureDetail(content){
   content.innerHTML = `
     <a class="back-link" id="backToSections">&larr; Back to sections</a>
     <div class="detail-layout">
-      <div class="card">
-        <h3 style="margin-top:0;">FIG.${escapeHtml(fig.num)} — ${escapeHtml(fig.name)}</h3>
-        <div class="diagram-wrap"><img src="${croppedUrl}" alt="Diagram"></div>
+      <div class="card" style="padding:0;">
+        <div style="padding:16px;">
+          <h3 style="margin:0 0 4px;">FIG.${escapeHtml(fig.num)} — ${escapeHtml(fig.name)}</h3>
+        </div>
+        <div class="diagram-wrap">
+          <div class="diagram-head">
+            <span>FIG.${escapeHtml(fig.num)} — ${escapeHtml(fig.name)}</span>
+            <a href="${croppedUrl}" target="_blank" rel="noopener" style="color:var(--accent2);text-decoration:none;">Open full size ↗</a>
+          </div>
+          <div class="img-zoom-wrap" id="zoomWrap">
+            <img id="figDiagramImg" src="${croppedUrl}" alt="Diagram">
+            <div class="mag-lens"></div>
+            <span class="zoom-hint">Click image to zoom</span>
+          </div>
+        </div>
       </div>
       <div class="card">
         <h3 style="margin-top:0;">Parts in this section</h3>
@@ -410,6 +429,7 @@ function renderFigureDetail(content){
     </div>
   `;
   document.getElementById('backToSections').addEventListener('click', () => { browseFigure = null; renderBrowseSeriesModel(); });
+  initMagnifier(document.getElementById('figDiagramImg'), document.getElementById('zoomWrap'));
 
   const tbody = document.getElementById('figPartsBody');
   fig.parts.forEach(p => {
@@ -443,6 +463,67 @@ function renderFigureDetail(content){
     }
     tbody.appendChild(tr);
   });
+}
+
+/* ================= Magnifier ================= */
+function initMagnifier(imgEl, wrapEl){
+  if (!imgEl || !wrapEl) return;
+  const ZOOM = 2.5;
+  let active = false;
+  function contentRect(){
+    const rect = imgEl.getBoundingClientRect();
+    const nw = imgEl.naturalWidth, nh = imgEl.naturalHeight;
+    if (!nw || !nh || !rect.width || !rect.height) return null;
+    const scale = Math.min(rect.width / nw, rect.height / nh);
+    const cw = nw * scale, ch = nh * scale;
+    const offX = (rect.width - cw) / 2;
+    const offY = (rect.height - ch) / 2;
+    return { rect, cw, ch, offX, offY };
+  }
+  function positionLens(clientX, clientY){
+    const lens = wrapEl.querySelector('.mag-lens');
+    if (!lens) return;
+    const cr = contentRect();
+    if (!cr) return;
+    const { rect, cw, ch, offX, offY } = cr;
+    let x = clientX - rect.left;
+    let y = clientY - rect.top;
+    x = Math.max(offX, Math.min(offX + cw, x));
+    y = Math.max(offY, Math.min(offY + ch, y));
+    const relX = x - offX;
+    const relY = y - offY;
+    const lensSize = lens.offsetWidth;
+    lens.style.left = `${x - lensSize/2}px`;
+    lens.style.top = `${y - lensSize/2}px`;
+    const bgW = cw * ZOOM;
+    const bgH = ch * ZOOM;
+    const bgX = -(relX * ZOOM - lensSize/2);
+    const bgY = -(relY * ZOOM - lensSize/2);
+    lens.style.backgroundImage = `url("${imgEl.src}")`;
+    lens.style.backgroundSize = `${bgW}px ${bgH}px`;
+    lens.style.backgroundPosition = `${bgX}px ${bgY}px`;
+    lens.classList.add('show');
+  }
+  function activate(clientX, clientY){
+    if (!contentRect()) return;
+    active = true;
+    wrapEl.classList.add('zoom-active');
+    const hint = wrapEl.querySelector('.zoom-hint');
+    if (hint) hint.textContent = 'Click to exit zoom';
+    positionLens(clientX, clientY);
+  }
+  function deactivate(){
+    active = false;
+    wrapEl.classList.remove('zoom-active');
+    const lens = wrapEl.querySelector('.mag-lens');
+    if (lens) lens.classList.remove('show');
+    const hint = wrapEl.querySelector('.zoom-hint');
+    if (hint) hint.textContent = 'Click image to zoom';
+  }
+  wrapEl.addEventListener('click', (e) => { if (active) deactivate(); else activate(e.clientX, e.clientY); });
+  wrapEl.addEventListener('pointermove', (e) => { if (active) positionLens(e.clientX, e.clientY); });
+  wrapEl.addEventListener('pointerleave', () => { const lens = wrapEl.querySelector('.mag-lens'); if (active && lens) lens.classList.remove('show'); });
+  wrapEl.addEventListener('pointerenter', (e) => { if (active) positionLens(e.clientX, e.clientY); });
 }
 
 function addToCart(part, qty){
