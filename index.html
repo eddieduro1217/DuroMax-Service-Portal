@@ -49,6 +49,9 @@
   .badge.ordered{background:rgba(15,75,145,.1);color:var(--accent2);}
   .badge.fulfilled{background:rgba(62,150,84,.14);color:var(--ok-hi);}
   .badge.cancelled{background:rgba(214,69,69,.12);color:var(--accent);}
+  .type-tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;}
+  .type-tag.warranty{background:rgba(15,75,145,.1);color:var(--accent2);}
+  .type-tag.paid_order{background:var(--panel-2);color:var(--text-lo);border:1px solid var(--border);}
   .tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);}
   .tab{padding:10px 16px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font-weight:600;font-size:14px;}
   .tab.active{color:var(--text);border-bottom-color:var(--accent2);}
@@ -290,11 +293,12 @@ async function renderDashboard(activeTab='orders'){
       content.innerHTML = `
         <div class="card">
           <table>
-            <thead><tr><th>Order Ref</th><th>Date</th><th>Status</th><th>Note</th></tr></thead>
+            <thead><tr><th>Order Ref</th><th>Type</th><th>Date</th><th>Status</th><th>Note</th></tr></thead>
             <tbody>
               ${currentOrders.map(o => `
                 <tr onclick="openOrder('${o.id}')">
                   <td>${escapeHtml(o.order_ref)}</td>
+                  <td><span class="type-tag ${o.order_type}">${o.order_type === 'warranty' ? 'Warranty' : 'Paid Order'}</span></td>
                   <td>${new Date(o.created_at).toLocaleDateString()}</td>
                   <td><span class="badge ${o.status}">${o.status.replace('_',' ')}</span></td>
                   <td class="muted">${escapeHtml(o.note || '')}</td>
@@ -581,6 +585,11 @@ function renderCartPanel(){
         </div>
       `).join('')}
     </div>
+    <label>Type of Order</label>
+    <select id="cartOrderType">
+      <option value="paid_order">Paid Order</option>
+      <option value="warranty">Warranty</option>
+    </select>
     <label>Note (optional)</label>
     <textarea id="cartOrderNote" rows="3" placeholder="Any additional details for this order..."></textarea>
     <div id="cartError" class="error"></div>
@@ -607,10 +616,11 @@ async function submitCartOrder(){
   if (cart.length === 0){ errEl.textContent = 'Your order is empty.'; return; }
 
   const note = document.getElementById('cartOrderNote').value.trim();
+  const order_type = document.getElementById('cartOrderType').value;
   const order_ref = genOrderRef();
 
   const { data: order, error: orderErr } = await sb.from('orders').insert({
-    service_center_id: currentUser.id, order_ref, note: note || null
+    service_center_id: currentUser.id, order_ref, note: note || null, order_type
   }).select().single();
   if (orderErr){ errEl.textContent = 'Error creating order: ' + orderErr.message; return; }
 
@@ -631,7 +641,17 @@ async function openOrder(orderId){
   const order = currentOrders.find(o => o.id === orderId) || allOrders.find(o => o.id === orderId);
   const { data: items } = await sb.from('order_items').select('*').eq('order_id', orderId);
   const { data: messages } = await sb.from('messages').select('*').eq('order_id', orderId).order('created_at', {ascending:true});
-  currentOrderDetail = { order, items: items||[], messages: messages||[] };
+
+  const msgs = messages || [];
+  const withAttachments = msgs.filter(m => m.attachment_path);
+  if (withAttachments.length){
+    await Promise.all(withAttachments.map(async m => {
+      const { data } = await sb.storage.from('message-attachments').createSignedUrl(m.attachment_path, 3600);
+      m.attachment_signed_url = data?.signedUrl || null;
+    }));
+  }
+
+  currentOrderDetail = { order, items: items||[], messages: msgs };
   renderOrderDetail();
 }
 
@@ -643,7 +663,10 @@ function renderOrderDetail(){
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <h3 style="margin:0;">${escapeHtml(order.order_ref)}</h3>
-        <span class="badge ${order.status}">${order.status.replace('_',' ')}</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span class="type-tag ${order.order_type}">${order.order_type === 'warranty' ? 'Warranty' : 'Paid Order'}</span>
+          <span class="badge ${order.status}">${order.status.replace('_',' ')}</span>
+        </div>
       </div>
       <p class="muted" style="font-size:13px;">Submitted ${new Date(order.created_at).toLocaleString()}</p>
       ${order.note ? `<p><strong>Note:</strong> ${escapeHtml(order.note)}</p>` : ''}
@@ -666,23 +689,69 @@ function renderOrderDetail(){
         ${messages.length===0 ? '<p class="muted">No messages yet.</p>' : messages.map(m => `
           <div class="msg-bubble ${m.sender_id===currentUser.id?'mine':''}">
             <div class="meta">${m.sender_id===currentUser.id?'You':(isAdmin?'Service Center':'DuroMax Team')} · ${new Date(m.created_at).toLocaleString()}</div>
-            <div class="body">${escapeHtml(m.body)}</div>
+            <div class="body">
+              ${m.body ? escapeHtml(m.body) : ''}
+              ${m.attachment_path ? `
+                <div style="margin-top:${m.body?'8px':'0'};">
+                  ${m.attachment_signed_url && isImageAttachment(m.attachment_name) ? `
+                    <a href="${m.attachment_signed_url}" target="_blank" rel="noopener">
+                      <img src="${m.attachment_signed_url}" alt="${escapeHtml(m.attachment_name||'attachment')}" style="max-width:220px;max-height:180px;border-radius:6px;display:block;border:1px solid var(--border);">
+                    </a>
+                  ` : `
+                    <a href="${m.attachment_signed_url||'#'}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;color:var(--accent2);font-size:12px;font-weight:600;text-decoration:none;">
+                      📎 ${escapeHtml(m.attachment_name||'Attachment')}
+                    </a>
+                  `}
+                </div>
+              ` : ''}
+            </div>
           </div>
         `).join('')}
       </div>
       <textarea id="newMsgBody" rows="2" placeholder="Type a message..."></textarea>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+        <label style="margin:0;display:inline-flex;align-items:center;gap:6px;cursor:pointer;color:var(--accent2);font-weight:600;font-size:13px;text-transform:none;letter-spacing:0;">
+          📎 Attach file
+          <input type="file" id="newMsgFile" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" style="display:none;">
+        </label>
+        <span id="fileNameLabel" class="muted" style="font-size:12px;"></span>
+      </div>
       <div id="msgError" class="error"></div>
       <button class="btn-primary" style="margin-top:10px;" onclick="sendMessage('${order.id}', '${order.service_center_id}')">Send</button>
     </div>
   `;
+  document.getElementById('newMsgFile').addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    document.getElementById('fileNameLabel').textContent = f ? f.name : '';
+  });
+}
+
+function isImageAttachment(filename){
+  if (!filename) return false;
+  return /\.(png|jpe?g|gif|webp)$/i.test(filename);
 }
 
 async function sendMessage(orderId, serviceCenterId){
   const body = document.getElementById('newMsgBody').value.trim();
+  const fileInput = document.getElementById('newMsgFile');
+  const file = fileInput.files[0];
   const errEl = document.getElementById('msgError');
-  if (!body){ errEl.textContent = 'Message cannot be empty.'; return; }
+  errEl.textContent = '';
+  if (!body && !file){ errEl.textContent = 'Add a message or attach a file.'; return; }
+
+  let attachment_path = null, attachment_name = null;
+  if (file){
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${orderId}/${Date.now()}_${safeName}`;
+    const { error: uploadErr } = await sb.storage.from('message-attachments').upload(path, file);
+    if (uploadErr){ errEl.textContent = 'File upload failed: ' + uploadErr.message; return; }
+    attachment_path = path;
+    attachment_name = file.name;
+  }
+
   const { error } = await sb.from('messages').insert({
-    order_id: orderId, service_center_id: serviceCenterId, sender_id: currentUser.id, body
+    order_id: orderId, service_center_id: serviceCenterId, sender_id: currentUser.id,
+    body: body || '', attachment_path, attachment_name
   });
   if (error){ errEl.textContent = error.message; return; }
   await openOrder(orderId);
@@ -736,12 +805,13 @@ async function renderAdminDashboard(activeTab='orders'){
     content.innerHTML = `
       <div class="card">
         <table>
-          <thead><tr><th>Order Ref</th><th>Service Center</th><th>Date</th><th>Status</th></tr></thead>
+          <thead><tr><th>Order Ref</th><th>Service Center</th><th>Type</th><th>Date</th><th>Status</th></tr></thead>
           <tbody>
             ${allOrders.map(o => `
               <tr onclick="openOrder('${o.id}')">
                 <td>${escapeHtml(o.order_ref)}</td>
                 <td>${escapeHtml(o.service_centers?.company_name || '—')}</td>
+                <td><span class="type-tag ${o.order_type}">${o.order_type === 'warranty' ? 'Warranty' : 'Paid Order'}</span></td>
                 <td>${new Date(o.created_at).toLocaleDateString()}</td>
                 <td><span class="badge ${o.status}">${o.status.replace('_',' ')}</span></td>
               </tr>
