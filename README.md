@@ -5,7 +5,8 @@ customer parts catalog (`DuroMax-DuroStar_Parts_Order`) — that one stays open,
 
 ## What this is
 
-After signing in, service centers land on a **home page of seven tiles**:
+After signing in, service centers land on a **home page** — a DuroMax banner masthead over
+**seven tiles**, each with its own product thumbnail:
 
 | Tile | What it does |
 |---|---|
@@ -25,6 +26,24 @@ Documentation content (manuals, specs, troubleshooting) is embedded in `index.ht
 `OWNERS_MANUALS`, `SERVICE_MANUALS`, `SPECS` and `TROUBLESHOOTING` constants — no database tables,
 no extra network calls. Manual PDFs are linked directly from DuroMax's Shopify CDN so they're
 always the current published revision.
+
+Every screen carries two navigation buttons — **Back to previous page** (a real history stack, so
+it unwinds whatever trail you took, including figure drill-downs) and **Back to home**. The header
+also keeps a persistent Home button.
+
+## Repo layout
+
+```
+index.html      the whole app (generated - see "Rebuilding" below)
+assets/         8 JPEGs: 7 tile thumbnails + the home banner
+build/          build script, stylesheet, new-section code, validation suites
+data/           the 5 scraped datasets (manuals, specs, troubleshooting)
+supabase/       migrations 0001-0004, run in order
+```
+
+`assets/` must sit at the repo root. If those files ever end up flattened into the root instead,
+the app falls back to the bare filename automatically, and if the image still can't be found each
+tile shows its original SVG icon rather than a broken image.
 
 ## Look and feel
 

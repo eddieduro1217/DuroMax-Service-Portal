@@ -283,3 +283,96 @@ noise — those are unreachable from the sandbox by design, not app errors.
 - **Gorgias API integration still not built** — Eddie hasn't picked lightweight vs full two-way sync.
   Note this session only *scraped* the public help center; no API was used.
 - Pricing/stock still intentionally hidden.
+
+---
+
+# Session 3 addendum — Thumbnails, two-way navigation, home banner (2026-09-02)
+
+Live as of this session: commit `de316f4` shipped session 2. This addendum is the next change on top.
+
+## 1. Tile thumbnails replace the SVG icons
+
+Eddie supplied 7 marketing banners (one per section) plus a wide storefront banner. They arrived at
+**three different aspect ratios** — 1.78, 1.99 and 2.50 — so they were normalised to a single **2:1**
+tile ratio with per-image anchoring rather than a blind centre crop:
+
+- 1.99 images (troubleshooting, owners, service, specs) — effectively no crop
+- 2.50 image (diagrams) — width trimmed off the **right**, anchored left to protect the logo + title
+- 1.78 images (orders, new order) — height trimmed off the **bottom** to drop the tiny feature strip,
+  which is illegible at tile size anyway. `tile-orders` needed a deeper pre-crop (to 84.5% height)
+  because its strip sits higher than the other one's; a uniform crop left it half-cut.
+
+Output: **JPEG q88, 4:4:4 subsampling, 800×400** (`subsampling=0` matters — these have crisp white
+text on dark grounds and 4:2:0 visibly rings on it). Chose JPEG over WebP deliberately: WebP was
+~1.5x smaller (404 KB vs 626 KB) but JPEG is universal and needs no `<picture>` fallback markup, and
+the whole set is still only **750 KB**. Banner is 1983×523 (3.79:1), cropped to drop dead sky above
+and dead concrete below.
+
+Files live in **`assets/`** at the repo root:
+
+```
+assets/tile-diagrams.jpg  tile-troubleshooting.jpg  tile-owners.jpg  tile-service.jpg
+       tile-specs.jpg     tile-orders.jpg           tile-neworder.jpg  banner-home.jpg
+```
+
+### Asset path resilience — deliberate, don't remove it
+
+`assetFallback()` gives every thumbnail and the banner a two-step fallback:
+`assets/<file>` → bare `<file>` (covers a flattened upload that dumped the images at the repo root)
+→ add class `gone`, which hides the `<img>` and lets the original **SVG icon show through underneath**.
+The icons were kept in the markup at a lower `z-index` purely as that last-resort layer. This exists
+because the session-2 upload flattened `build/` and `data/` the same way; it makes the images work
+whichever way they land.
+
+`.tile-kicker` was moved from top-**left** to top-**right** — every thumbnail carries the DuroMax
+lockup in its top-left corner and the chip collided with it.
+
+## 2. Back to previous page + Back to home
+
+A real history stack, not a hardcoded parent link. `navStack` holds state snapshots
+(`view`, `tsArticle`, `specSel`, `browseSeries/Model/Figure`, `browseMode`, `scrollY`).
+
+- `navPush()` — records the state being left. Called by every **forward** move: `navigate()`,
+  `openTs()`, `openSpec()`, `openModelDiagrams()`, a figure card click, and the contextual
+  back links. De-dupes identical consecutive states; caps at 60 entries.
+- `navRender(state)` — restores globals and re-renders **without** pushing. This is why Back
+  never loops.
+- `goBack()` — pops, renders, restores scroll position.
+- `navBar()` — the two-button row, emitted by `pageHead()` and by every view that doesn't use it
+  (spec sheet, TS article, catalog page, dashboard, admin). Back is `disabled` when the stack is empty.
+
+Both dashboards' tab strips now route through `navigate('orders'|'new'|'admin_orders'|'admin_centers')`
+instead of calling their render functions directly, so tab switches are part of the trail too.
+
+**`renderDashboard(activeTab, keepBrowse=false)`** — the new second argument. Without it,
+`renderDashboard('new')` nulls `browseSeries/Model/Figure`, which would wipe the state Back was
+trying to restore. `navRender` passes `keepBrowse=true` for the `new` view only.
+
+## 3. Home banner
+
+`.home-masthead` wraps the banner `<img>` and the existing dark `.home-hero` title band into one
+unit: photo → 3px blue rule → dark band → tiles. Full-bleed via `margin:-24px -24px 24px`,
+`max-height:340px` (190px under 700px wide), `object-position:center 62%` to keep the generators in
+frame when it crops. The banner is light greyscale and the theme is dark-band-plus-blue, so it is
+*not* used as a text background — the dark strip underneath carries the heading instead.
+
+## Validation
+
+- `build/checks.js` — now **60+ checks**: adds history wiring (every forward path pushes, `goBack`
+  does not, tabs route via `navigate`, `keepBrowse` present), all 8 assets on disk, each referenced,
+  7/7 tiles declare a thumbnail, relative asset base, flat-path fallback present, payload < 1 MB.
+- `build/smoke.js` — **88 assertions, 0 failures, zero console errors**. New section [6] walks a
+  3-deep trail (home → specs list → spec sheet → Back → Back), asserts Back is disabled at the root,
+  unwinds a figure drill-down, and confirms the header Home button still works. Section [2] now
+  asserts the banner and all 7 thumbnails **actually decode** (`naturalWidth > 0`, no `gone` class) —
+  the harness serves the real `assets/` folder so a 404 fails the suite.
+- 23 build patches (was 20).
+
+## Still open
+
+- **`build/` and `data/` are still not in the repo** from session 2 (flattened upload was pruned to
+  just `index.html` + the two READMEs). No effect on the running site; the rebuild instructions in
+  README.md point at files that aren't there yet.
+- PAT pasted in chat during session 2 — **should be revoked**.
+- SMTP/email invites still broken; Gorgias API integration still unbuilt; pricing/stock still hidden.
+- Two upstream Gorgias data errors unchanged (XP28000iHT manual stub, XP16000iHT wrong PDF).

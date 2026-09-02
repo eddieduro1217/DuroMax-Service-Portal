@@ -115,6 +115,20 @@
 
   .back-link{font-family:var(--head);color:var(--blue);cursor:pointer;font-size:13px;font-weight:700;margin-bottom:14px;display:inline-block;text-decoration:none;}
   .back-link:hover{color:var(--blue-hi);}
+
+  /* ---------- Page nav: Back to previous page / Back to home ---------- */
+  .page-nav{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px;}
+  .nav-btn{
+    font-family:var(--head);font-size:12px;font-weight:700;letter-spacing:.03em;
+    padding:8px 14px;border-radius:0;border:1.25px solid var(--border);
+    background:#fff;color:var(--text);cursor:pointer;
+    display:inline-flex;align-items:center;gap:7px;
+  }
+  .nav-btn:hover:not(:disabled){background:var(--panel-2);border-color:var(--blue);color:var(--blue);}
+  .nav-btn:disabled{opacity:.4;cursor:not-allowed;}
+  .nav-btn.nav-home{background:var(--blue);border-color:var(--blue);color:#fff;}
+  .nav-btn.nav-home:hover{background:var(--blue-hi);border-color:var(--blue-hi);color:#fff;}
+  .nav-btn .gl{font-size:14px;line-height:1;}
   .hidden{display:none;}
   .center-box{max-width:430px;margin:56px auto;}
 
@@ -128,8 +142,15 @@
   .login-note{font-size:12px;color:var(--muted);margin-top:20px;line-height:1.55;}
   .login-note a{color:var(--blue);font-weight:600;}
 
-  /* ---------- Home page hero + tiles ---------- */
-  .home-hero{background:var(--ink);border-left:4px solid var(--blue);padding:22px 24px;margin-bottom:24px;}
+  /* ---------- Home masthead: banner photo + dark title band ---------- */
+  .home-masthead{margin:-24px -24px 24px;}
+  .home-banner{
+    display:block;width:100%;height:auto;max-height:340px;object-fit:cover;object-position:center 62%;
+    border-bottom:3px solid var(--blue);background:var(--panel-2);
+  }
+  .home-banner.gone{display:none;}
+  @media (max-width:700px){ .home-banner{max-height:190px;} }
+  .home-hero{background:var(--ink);padding:22px 24px;}
   .home-hero h1{margin:0 0 6px;color:#fff;font-size:26px;text-transform:uppercase;}
   .home-hero p{margin:0;color:var(--grey-light);font-size:14px;}
   .home-section-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0 0 4px;}
@@ -141,17 +162,26 @@
   .tile:hover{border-color:var(--blue);box-shadow:0 6px 18px rgba(15,75,145,.14);transform:translateY(-2px);}
   .tile:focus-visible{outline:3px solid var(--yellow);outline-offset:2px;}
   .tile-art{
-    position:relative;aspect-ratio:16/7;background:var(--ink);
+    position:relative;aspect-ratio:2/1;background:var(--ink);
     background-image:linear-gradient(180deg, #2B2C2C 0%, #131414 72%);
     display:flex;align-items:center;justify-content:center;overflow:hidden;
     border-bottom:3px solid var(--blue);
   }
+  /* Thumbnail sits over the icon; if the image 404s the icon shows through as fallback. */
+  .tile-art .thumb{
+    position:absolute;inset:0;z-index:3;
+    width:100%;height:100%;object-fit:cover;display:block;
+  }
+  .tile-art .thumb.gone{display:none;}
   .tile-art svg{width:58px;height:58px;stroke:var(--yellow);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;position:relative;z-index:2;}
   .tile-art::after{
     content:'';position:absolute;inset:0;z-index:1;
     background-image:repeating-linear-gradient(135deg, rgba(255,255,255,.04) 0 2px, transparent 2px 9px);
   }
-  .tile-kicker{position:absolute;top:0;left:0;z-index:3;background:var(--blue);color:#fff;font-family:var(--head);font-weight:700;font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:4px 9px;}
+  /* top-RIGHT: the thumbnails all carry the DuroMax lockup top-left */
+  .tile-kicker{position:absolute;top:0;right:0;z-index:4;background:var(--blue);color:#fff;font-family:var(--head);font-weight:700;font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:4px 9px;}
+  .tile:hover .tile-art .thumb{transform:scale(1.03);transition:transform .25s ease;}
+  .tile-art .thumb{transition:transform .25s ease;}
   .tile-body{padding:15px 17px 17px;display:flex;flex-direction:column;gap:5px;flex:1;}
   .tile-title{font-family:var(--head);font-weight:700;font-size:17px;color:var(--ink);line-height:1.25;}
   .tile-desc{font-size:13px;color:var(--text-lo);line-height:1.5;}
@@ -420,22 +450,21 @@ function cleanupCartUI(){
   document.getElementById('cartFab')?.remove();
 }
 
-async function renderDashboard(activeTab='orders'){
+async function renderDashboard(activeTab='orders', keepBrowse=false){
   if (activeTab !== 'new') cleanupCartUI();
   const { data: orders, error } = await sb.from('orders').select('*').order('created_at', {ascending:false});
   if (error){ renderError('Could not load orders: ' + error.message); return; }
   currentOrders = orders || [];
 
   view = activeTab;
-  app.innerHTML = `
-    <a class="back-link" onclick="navigate('home')">&larr; Back to home</a>
+  app.innerHTML = navBar() + `
     <div style="margin-bottom:18px;">
       <h1 style="margin:0 0 6px;font-size:26px;text-transform:uppercase;">${activeTab==='new' ? 'New Order Request' : 'My Orders'}</h1>
       <div class="rule"></div>
     </div>
     <div class="tabs">
-      <div class="tab ${activeTab==='orders'?'active':''}" onclick="renderDashboard('orders')">My Orders</div>
-      <div class="tab ${activeTab==='new'?'active':''}" onclick="renderDashboard('new')">New Order Request</div>
+      <div class="tab ${activeTab==='orders'?'active':''}" onclick="navigate('orders')">My Orders</div>
+      <div class="tab ${activeTab==='new'?'active':''}" onclick="navigate('new')">New Order Request</div>
     </div>
     <div id="tabContent"></div>
   `;
@@ -443,7 +472,7 @@ async function renderDashboard(activeTab='orders'){
 
   if (activeTab === 'new'){
     browseMode = 'order';
-    browseSeries = null; browseModel = null; browseFigure = null;
+    if (!keepBrowse){ browseSeries = null; browseModel = null; browseFigure = null; }
     content.innerHTML = `
       <p class="muted" style="font-size:14px;margin:0 0 16px;">Pick a series and model, open a figure, then add the parts you need. Submit the list as a warranty or paid order request.</p>
       <div id="browseWrap"></div>`;
@@ -555,7 +584,7 @@ function renderSectionsGrid(content){
         <div class="fig-meta">${fig.parts.length} part${fig.parts.length===1?'':'s'}</div>
       </div>
     `;
-    card.addEventListener('click', () => { browseFigure = fig.num; renderBrowseSeriesModel(); });
+    card.addEventListener('click', () => { navPush(); browseFigure = fig.num; renderBrowseSeriesModel(); });
     grid.appendChild(card);
   });
 }
@@ -597,7 +626,7 @@ function renderFigureDetail(content){
       </div>
     </div>
   `;
-  document.getElementById('backToSections').addEventListener('click', () => { browseFigure = null; renderBrowseSeriesModel(); });
+  document.getElementById('backToSections').addEventListener('click', () => { navPush(); browseFigure = null; renderBrowseSeriesModel(); });
   initMagnifier(document.getElementById('figDiagramImg'), document.getElementById('zoomWrap'));
 
   const tbody = document.getElementById('figPartsBody');
@@ -941,15 +970,14 @@ async function renderAdminDashboard(activeTab='orders'){
   allServiceCenters = centers || [];
 
   view = 'admin_' + activeTab;
-  app.innerHTML = `
-    <a class="back-link" onclick="navigate('home')">&larr; Back to home</a>
+  app.innerHTML = navBar() + `
     <div style="margin-bottom:18px;">
       <h1 style="margin:0 0 6px;font-size:26px;text-transform:uppercase;">${activeTab==='centers' ? 'Service Centers' : 'All Orders'}</h1>
       <div class="rule"></div>
     </div>
     <div class="tabs">
-      <div class="tab ${activeTab==='orders'?'active':''}" onclick="renderAdminDashboard('orders')">All Orders</div>
-      <div class="tab ${activeTab==='centers'?'active':''}" onclick="renderAdminDashboard('centers')">Service Centers</div>
+      <div class="tab ${activeTab==='orders'?'active':''}" onclick="navigate('admin_orders')">All Orders</div>
+      <div class="tab ${activeTab==='centers'?'active':''}" onclick="navigate('admin_centers')">Service Centers</div>
     </div>
     <div id="tabContent"></div>
   `;
@@ -1002,6 +1030,20 @@ let tsArticle = null;       // active troubleshooting article id
 let specSel = null;         // {series, model} for the open spec sheet
 let homeOrderCount = null;  // cached count for the My Orders tile
 
+// ---- Assets -------------------------------------------------------------
+// Thumbnails live in assets/. If that folder is missing (e.g. a flattened
+// upload put the files at the repo root) we retry the bare filename, and if
+// that also fails the tile's SVG icon shows through underneath.
+const ASSETS = 'assets/';
+function assetFallback(el, file){
+  if (!el.dataset.retried){ el.dataset.retried = '1'; el.src = file; return; }
+  el.classList.add('gone');
+}
+function thumbTag(file, alt){
+  return `<img class="thumb" src="${ASSETS}${file}" alt="${escapeHtml(alt)}"
+    loading="lazy" decoding="async" onerror="assetFallback(this,'${file}')">`;
+}
+
 const ICONS = {
   diagram:'<svg viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/><path d="M10 6.5h4M6.5 10v4M17.5 10v4M10 17.5h4"/></svg>',
   wrench:'<svg viewBox="0 0 24 24"><path d="M14.6 6.4a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9l-3.8 3.8z"/></svg>',
@@ -1018,19 +1060,79 @@ function countLive(map){ return Object.values(map).reduce((n,a)=>n+a.filter(d=>d
 function countSpecs(){ return Object.values(SPECS).reduce((n,a)=>n+a.length,0); }
 function countModels(){ return Object.values(SERIES).reduce((n,a)=>n+a.length,0); }
 
-function navigate(v){
+// ---- History stack ------------------------------------------------------
+// Every forward move pushes the state it left behind; goBack() pops and
+// re-renders without pushing, so Back never loops.
+let navStack = [];
+
+function navSnapshot(){
+  return {
+    view, tsArticle,
+    specSel: specSel ? {series:specSel.series, model:specSel.model} : null,
+    browseSeries, browseModel, browseFigure, browseMode,
+    scrollY: window.scrollY || 0
+  };
+}
+function sameState(a,b){
+  if (!a || !b) return false;
+  return a.view===b.view && a.tsArticle===b.tsArticle && a.browseSeries===b.browseSeries
+      && a.browseModel===b.browseModel && a.browseFigure===b.browseFigure && a.browseMode===b.browseMode
+      && (a.specSel&&a.specSel.model)===(b.specSel&&b.specSel.model);
+}
+function navPush(){
+  if (view === 'login') return;
+  const s = navSnapshot();
+  if (sameState(navStack[navStack.length-1], s)) return;
+  navStack.push(s);
+  if (navStack.length > 60) navStack.shift();
+}
+function navRender(s){
+  view = s.view; tsArticle = s.tsArticle; specSel = s.specSel;
+  browseSeries = s.browseSeries; browseModel = s.browseModel;
+  browseFigure = s.browseFigure; browseMode = s.browseMode || 'order';
   cleanupCartUI();
-  view = v; tsArticle = null; specSel = null;
+  if (view === 'home')            return renderHome();
+  if (view === 'troubleshooting') return tsArticle ? renderTsArticle() : renderTroubleshootingList();
+  if (view === 'owners' || view === 'service') return renderManuals(view);
+  if (view === 'specs')           return specSel ? renderSpecDetail() : renderSpecsList();
+  if (view === 'diagrams')        return renderCatalogPage('Parts Diagrams');
+  if (view === 'orders')          return renderDashboard('orders');
+  if (view === 'new')             return renderDashboard('new', true);
+  if (view === 'admin_orders')    return renderAdminDashboard('orders');
+  if (view === 'admin_centers')   return renderAdminDashboard('centers');
+  return renderHome();
+}
+function goBack(){
+  if (!navStack.length) return navigate('home');
+  const s = navStack.pop();
+  Promise.resolve(navRender(s)).then(() => window.scrollTo({top: s.scrollY || 0}));
+}
+function navBar(){
+  const canBack = navStack.length > 0;
+  return `<div class="page-nav">
+    <button class="nav-btn nav-back" onclick="goBack()" ${canBack ? '' : 'disabled'}
+      title="${canBack ? 'Return to the last screen you were on' : 'No previous screen'}">
+      <span class="gl">&larr;</span> Back to previous page</button>
+    <button class="nav-btn nav-home" onclick="navigate('home')" title="Return to the portal home page">
+      <span class="gl">&#8962;</span> Back to home</button>
+  </div>`;
+}
+
+function navigate(v){
+  navPush();
+  cleanupCartUI();
+  tsArticle = null; specSel = null;
+  view = v;
   window.scrollTo({top:0});
   if (v === 'home') return renderHome();
   if (v === 'diagrams'){ browseMode='reference'; browseSeries=null; browseModel=null; browseFigure=null; return renderCatalogPage('Parts Diagrams'); }
-  if (v === 'new'){ return renderDashboard('new'); }
-  if (v === 'orders'){ return renderDashboard('orders'); }
+  if (v === 'new')    return renderDashboard('new');
+  if (v === 'orders') return renderDashboard('orders');
   if (v === 'troubleshooting') return renderTroubleshootingList();
-  if (v === 'owners') return renderManuals('owners');
+  if (v === 'owners')  return renderManuals('owners');
   if (v === 'service') return renderManuals('service');
-  if (v === 'specs') return renderSpecsList();
-  if (v === 'admin_orders') return renderAdminDashboard('orders');
+  if (v === 'specs')   return renderSpecsList();
+  if (v === 'admin_orders')  return renderAdminDashboard('orders');
   if (v === 'admin_centers') return renderAdminDashboard('centers');
   return renderHome();
 }
@@ -1042,6 +1144,7 @@ function tile(t){
       <div class="tile-art">
         ${t.kicker ? `<span class="tile-kicker">${escapeHtml(t.kicker)}</span>` : ''}
         ${ICONS[t.icon]}
+        ${t.img ? thumbTag(t.img, t.title) : ''}
       </div>
       <div class="tile-body">
         <div class="tile-title">${escapeHtml(t.title)}</div>
@@ -1061,25 +1164,25 @@ async function renderHome(){
   const who = currentProfile ? currentProfile.company_name : '';
 
   const tiles = [
-    {view:'diagrams', icon:'diagram', kicker:'Parts', title:'DuroMax Diagrams',
+    {view:'diagrams', icon:'diagram', img:'tile-diagrams.jpg', kicker:'Parts', title:'DuroMax Diagrams',
      desc:'Exploded parts diagrams with click-to-zoom. Look up a ref number and part number by figure.',
      count:`${Object.keys(SERIES).length} series · ${countModels()} models · ${PARTS.length.toLocaleString()} parts`},
-    {view:'troubleshooting', icon:'wrench', kicker:'Diagnose', title:'Troubleshooting Guides',
+    {view:'troubleshooting', icon:'wrench', img:'tile-troubleshooting.jpg', kicker:'Diagnose', title:'Troubleshooting Guides',
      desc:'Step-by-step diagnostics for no-start and no-output faults, with the parts to replace by symptom.',
      count:`${TROUBLESHOOTING.length} guides`},
-    {view:'owners', icon:'book', kicker:'Docs', title:"Owner's Manuals",
+    {view:'owners', icon:'book', img:'tile-owners.jpg', kicker:'Docs', title:"Owner's Manuals",
      desc:'Factory owner\u2019s manuals by series and model. Opens the official PDF in a new tab.',
      count:`${Object.keys(OWNERS_MANUALS).length} series · ${countLive(OWNERS_MANUALS)} manuals`},
-    {view:'service', icon:'gear', kicker:'Docs', title:'Service Manuals',
+    {view:'service', icon:'gear', img:'tile-service.jpg', kicker:'Docs', title:'Service Manuals',
      desc:'Full service and repair manuals with torque specs, wiring diagrams and teardown procedures.',
      count:`${Object.keys(SERVICE_MANUALS).length} series · ${countLive(SERVICE_MANUALS)} manuals`},
-    {view:'specs', icon:'gauge', kicker:'Specs', title:'Generator Specifications',
+    {view:'specs', icon:'gauge', img:'tile-specs.jpg', kicker:'Specs', title:'Generator Specifications',
      desc:'Output and runtime by fuel, engine, electrical, outlets, fuel system and dimensions.',
      count:`${Object.keys(SPECS).length} series · ${countSpecs()} spec sheets`},
-    {view:'orders', icon:'clipboard', kicker:'Orders', title:'My Orders',
+    {view:'orders', icon:'clipboard', img:'tile-orders.jpg', kicker:'Orders', title:'My Orders',
      desc:'Track order status and message the DuroMax team on any order, with file attachments.',
      count: homeOrderCount === 0 ? 'No orders yet' : `${homeOrderCount} order${homeOrderCount===1?'':'s'} on file`},
-    {view:'new', icon:'cart', kicker:'Orders', title:'New Order Request',
+    {view:'new', icon:'cart', img:'tile-neworder.jpg', kicker:'Orders', title:'New Order Request',
      desc:'Browse diagrams, build a parts list, and submit it as a warranty or paid order request.',
      count:'Warranty or paid order'}
   ];
@@ -1092,9 +1195,13 @@ async function renderHome(){
   ] : [];
 
   app.innerHTML = `
-    <div class="home-hero">
-      <h1>Service Center Portal</h1>
-      <p>${who ? escapeHtml(who) + ' &mdash; e' : 'E'}verything you need to diagnose, look up and order DuroMax and DuroStar parts.</p>
+    <div class="home-masthead">
+      <img class="home-banner" src="${ASSETS}banner-home.jpg" alt="DuroMax XP28000iHT and XP13000HX generators outside the DuroMax Power Systems facility"
+        fetchpriority="high" decoding="async" onerror="assetFallback(this,'banner-home.jpg')">
+      <div class="home-hero">
+        <h1>Service Center Portal</h1>
+        <p>${who ? escapeHtml(who) + ' &mdash; e' : 'E'}verything you need to diagnose, look up and order DuroMax and DuroStar parts.</p>
+      </div>
     </div>
 
     <div class="home-section-head">
@@ -1121,8 +1228,7 @@ async function renderHome(){
 }
 
 function pageHead(title, sub){
-  return `
-    <a class="back-link" onclick="navigate('home')">&larr; Back to home</a>
+  return navBar() + `
     <div style="margin-bottom:20px;">
       <h1 style="margin:0 0 6px;font-size:26px;text-transform:uppercase;">${escapeHtml(title)}</h1>
       <div class="rule"></div>
@@ -1148,13 +1254,18 @@ function renderTroubleshootingList(){
 }
 
 function openTs(id){
-  tsArticle = id;
-  const a = TROUBLESHOOTING.find(x => x.id === id);
-  if (!a) return renderTroubleshootingList();
+  navPush();
+  view = 'troubleshooting'; tsArticle = id;
   window.scrollTo({top:0});
+  renderTsArticle();
+}
 
-  app.innerHTML = `
-    <a class="back-link" onclick="renderTroubleshootingList()">&larr; Back to troubleshooting guides</a>
+function renderTsArticle(){
+  const a = TROUBLESHOOTING.find(x => x.id === tsArticle);
+  if (!a) return renderTroubleshootingList();
+
+  app.innerHTML = navBar() + `
+    <a class="back-link" onclick="navPush();tsArticle=null;renderTroubleshootingList();">&larr; Back to troubleshooting guides</a>
     <div style="margin-bottom:18px;">
       <h1 style="margin:0 0 6px;font-size:26px;">${escapeHtml(a.h)}</h1>
       <div class="rule"></div>
@@ -1259,18 +1370,23 @@ function renderSpecsList(){
 }
 
 function openSpec(series, model){
-  const list = SPECS[series] || [];
-  const s = list.find(x => x.m === model);
-  if (!s) return renderSpecsList();
-  specSel = {series, model};
+  navPush();
+  view = 'specs'; specSel = {series, model};
   window.scrollTo({top:0});
+  renderSpecDetail();
+}
+
+function renderSpecDetail(){
+  const {series, model} = specSel || {};
+  const s = (SPECS[series] || []).find(x => x.m === model);
+  if (!s) return renderSpecsList();
 
   const manual = (OWNERS_MANUALS[Object.keys(OWNERS_MANUALS).find(k => (OWNERS_MANUALS[k]||[]).some(d=>d.m===model)) ] || []).find(d=>d.m===model);
   const svc = (SERVICE_MANUALS[Object.keys(SERVICE_MANUALS).find(k => (SERVICE_MANUALS[k]||[]).some(d=>d.m===model)) ] || []).find(d=>d.m===model);
   const hasDiagrams = Object.values(SERIES).some(a => a.includes(model));
 
-  app.innerHTML = `
-    <a class="back-link" onclick="renderSpecsList()">&larr; Back to generator specifications</a>
+  app.innerHTML = navBar() + `
+    <a class="back-link" onclick="navPush();specSel=null;renderSpecsList();">&larr; Back to generator specifications</a>
     <div style="margin-bottom:18px;">
       <h1 style="margin:0 0 6px;font-size:28px;font-family:var(--mono);letter-spacing:.01em;">${escapeHtml(s.m)}</h1>
       <div class="rule"></div>
@@ -1278,8 +1394,8 @@ function openSpec(series, model){
     </div>
 
     <div class="row" style="margin-bottom:20px;">
-      ${manual && manual.pdf ? `<div style="flex:0 0 auto;"><a class="btn-blue" style="display:inline-block;text-decoration:none;" href="${escapeHtml(manual.pdf)}" target="_blank" rel="noopener">Owner&rsquo;s manual &nearr;</a></div>` : ''}
-      ${svc && svc.pdf ? `<div style="flex:0 0 auto;"><a class="btn-secondary" style="display:inline-block;text-decoration:none;" href="${escapeHtml(svc.pdf)}" target="_blank" rel="noopener">Service manual &nearr;</a></div>` : ''}
+      ${manual && manual.pdf ? `<div style="flex:0 0 auto;"><a class="btn-blue" href="${escapeHtml(manual.pdf)}" target="_blank" rel="noopener">Owner&rsquo;s manual &nearr;</a></div>` : ''}
+      ${svc && svc.pdf ? `<div style="flex:0 0 auto;"><a class="btn-secondary" href="${escapeHtml(svc.pdf)}" target="_blank" rel="noopener">Service manual &nearr;</a></div>` : ''}
       ${hasDiagrams ? `<div style="flex:0 0 auto;"><button class="btn-secondary" onclick="openModelDiagrams('${escapeHtml(model).replace(/'/g,"\\'")}')">Parts diagrams &rarr;</button></div>` : ''}
     </div>
 
@@ -1309,16 +1425,18 @@ function openSpec(series, model){
 function openModelDiagrams(model){
   const series = Object.keys(SERIES).find(s => SERIES[s].includes(model));
   if (!series) return navigate('diagrams');
+  navPush();
   cleanupCartUI();
   view = 'diagrams'; browseMode = 'reference';
   browseSeries = series; browseModel = model; browseFigure = null;
+  specSel = null;
+  window.scrollTo({top:0});
   renderCatalogPage('Parts Diagrams');
 }
 
 function renderCatalogPage(title){
   const isRef = browseMode === 'reference';
-  app.innerHTML = `
-    <a class="back-link" onclick="navigate('home')">&larr; Back to home</a>
+  app.innerHTML = navBar() + `
     <div style="margin-bottom:18px;">
       <h1 style="margin:0 0 6px;font-size:26px;text-transform:uppercase;">${escapeHtml(title)}</h1>
       <div class="rule"></div>
