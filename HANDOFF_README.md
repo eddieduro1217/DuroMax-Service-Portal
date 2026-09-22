@@ -29,7 +29,7 @@ access to data is controlled entirely by Supabase Row Level Security, not repo v
 3. **Full catalog browsing reused for order creation** — "New Order Request" tab replicates the
    public catalog's UX: Series → Model → figure sections grid → figure detail (diagram + parts
    table) → Add to cart → floating cart panel → submit. This pulls the parts dataset
-   (`customer_parts_data.json`, 7,189 rows) embedded directly in this repo's `index.html`, and
+   (`customer_parts_data.json`, 7,949 rows) embedded directly in this repo's `index.html`, and
    pulls **diagram images cross-origin** from the public catalog's live GitHub Pages URL
    (`https://eddieduro1217.github.io/DuroMax-DuroStar_Parts_Order/images_hotspot/...` and
    `/images/...`) rather than duplicating ~120MB of images into this repo.
@@ -264,7 +264,7 @@ To re-apply after an upstream edit: `cp index.html.orig index.html && python3 bu
 ## Validation run
 
 - `new Function()` syntax check on the extracted script block — **pass** (1.38M chars)
-- Data integrity — PARTS 7,189 rows / SERIES 8 series, 30 models / all new counts as listed above
+- Data integrity — PARTS 7,949 rows / SERIES 9 series, 34 models / all new counts as listed above
 - NetSuite leakage guard (`'id' | 'u' | 's' in p`) — **pass, none present**
 - All 51 PDF URLs verified to be `https://cdn.shopify.com/` — **pass**
 - Playwright, stubbed Supabase, 5 scenarios (login / home / all 7 sections / admin / 390px mobile) —
